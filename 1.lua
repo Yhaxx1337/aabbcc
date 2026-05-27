@@ -1,7 +1,6 @@
 local Genv = getgenv()
 
 Genv.Connections = Genv.Connections or {}
-Genv.Desync = Genv.Desync or {}
 Genv.XRayState = Genv.XRayState or {
     isProcessing = false,
     currentState = nil,
@@ -17,21 +16,17 @@ local Vector3New = Vector3.new
 local Vector2New = Vector2.new
 local UDim2New = UDim2.new
 local Destroy = game.Destroy
-local CFrameNew = CFrame.new
-local GetDescendants = game.GetDescendants
 
 local Workspace = GetService(game, "Workspace")
 local RunService = GetService(game, "RunService")
 local Players = GetService(game, "Players")
 
 local LocalPlayer = Players.LocalPlayer
-local Desync = Genv.Desync
 local XRayState = Genv.XRayState
 
 local XRay = {}
 local Utility = {}
 local Connection = {}
-local Desyncing = {}
 
 local TeamColors = {
     Murderer = Color3FromRGB(255, 0, 0),
@@ -76,14 +71,6 @@ do
         Callback = function(Value) end,
     })
 
-    local CoinsESPSection = VisualsTab:CreateSection("金币透视")
-    VisualsTab:CreateToggle({
-        Name = "金币透视",
-        CurrentValue = false,
-        Flag = "Visuals/ESP/Coins",
-        Callback = function(Value) end,
-    })
-
     local WorldSection = VisualsTab:CreateSection("地图透视")
     VisualsTab:CreateToggle({
         Name = "全图X光",
@@ -91,32 +78,10 @@ do
         Flag = "Visuals/World/XRay",
         Callback = function(Value) end,
     })
-
-    local MiscTab = Window:CreateTab("杂项", "rewind")
-
-    local MovementSection = MiscTab:CreateSection("移动")
-    MiscTab:CreateToggle({
-        Name = "反甩飞",
-        CurrentValue = false,
-        Flag = "Misc/AntiFling",
-        Callback = function(Value) end,
-    })
-    MiscTab:CreateToggle({
-        Name = "自动触摸金币",
-        CurrentValue = false,
-        Flag = "Misc/AutoCoins",
-        Callback = function(Value) end,
-    })
-    MiscTab:CreateToggle({
-        Name = "隐身 (半无敌)",
-        CurrentValue = false,
-        Flag = "Misc/VoidHide",
-        Callback = function(Value) end,
-    })
 end
 
 do
-    function Utility:Create(ClassName: string, Properties: table)
+    function Utility:Create(ClassName, Properties)
         local Object = InstanceNew(ClassName)
         local Parent = Properties.Parent
         for Index, Property in Properties do
@@ -127,30 +92,7 @@ do
         return Object
     end
 
-    function Utility:AntiFling(State: boolean)
-        for _, Player in Players:GetPlayers() do
-            if Player == LocalPlayer then continue end
-            local Character = Player.Character
-            if not Character then continue end
-            for _, BodyPart in Character:GetDescendants() do
-                if BodyPart:IsA("BasePart") then BodyPart.CanCollide = not State end
-            end
-        end
-    end
-
-    function Utility:GetRootPart()
-        if not LocalPlayer then return end
-        local Character = LocalPlayer.Character
-        if not Character then return end
-        local Humanoid = FindFirstChildOfClass(Character, "Humanoid")
-        if not Humanoid then return end
-        if Humanoid.Health <= 0 then return end
-        local RootPart = Humanoid.RootPart
-        if not RootPart then return end
-        return RootPart
-    end
-
-    function Utility:GetTeam(Player: Player)
+    function Utility:GetTeam(Player)
         if not Player then return end
         local Backpack = FindFirstChildOfClass(Player, "Backpack")
         if not Backpack then return end
@@ -163,23 +105,61 @@ do
         return
     end
 
-    function Utility:GetCoinContainer()
-        for _, Instance in GetDescendants(Workspace) do
-            if not Instance:IsA("Model") then continue end
-            if Instance.Name ~= "CoinContainer" then continue end
-            return Instance
-        end
-    end
+    local BillboardTemplate = Utility:Create("BillboardGui", {
+        Name = "@",
+        Size = UDim2New(0, 100, 0, 40),
+        AlwaysOnTop = true,
+        StudsOffset = Vector3New(0, 3, 0),
+        SizeOffset = Vector2New(0, 0),
+        ClipsDescendants = false,
+        ResetOnSpawn = false,
+    })
 
-    function Utility:ClaimAllCoins()
-        local CoinContainer = Utility:GetCoinContainer()
-        if not CoinContainer then return end
-        local RootPart = Utility:GetRootPart()
-        if not RootPart then return end
-        for _, Coin in CoinContainer:GetChildren() do
-            if not Coin then continue end
-            firetouchinterest(RootPart, Coin, 0)
-            firetouchinterest(RootPart, Coin, 1)
+    local LabelTemplate = Utility:Create("TextLabel", {
+        Size = UDim2New(1, 0, 1, 0),
+        BackgroundTransparency = 1,
+        TextSize = 12,
+        TextStrokeTransparency = 0,
+        ZIndex = 10,
+        Parent = BillboardTemplate,
+    })
+
+    function Utility:PlayerESP(State, NameEnabled)
+        for _, Player in Players:GetPlayers() do
+            if Player == LocalPlayer then continue end
+            local PlayerTeamName = Utility:GetTeam(Player)
+            local Character = Player.Character
+            if not Character then continue end
+            local Head = FindFirstChild(Character, "Head")
+            if not Head then continue end
+            local OldHighlight = FindFirstChildOfClass(Character, "Highlight")
+            local OldBillboard = FindFirstChild(Head, "@")
+
+            if OldHighlight and State then
+                OldHighlight.FillColor = TeamColors[PlayerTeamName] or Color3FromRGB(0, 255, 0)
+                if OldBillboard then
+                    local Label = OldBillboard:FindFirstChildOfClass("TextLabel")
+                    if Label then
+                        Label.Visible = NameEnabled
+                        Label.TextColor3 = TeamColors[PlayerTeamName] or Color3FromRGB(0, 255, 0)
+                    end
+                end
+                continue
+            elseif OldHighlight and not State then
+                Destroy(OldHighlight)
+                if OldBillboard then Destroy(OldBillboard) end
+                continue
+            end
+
+            if State and Head then
+                InstanceNew("Highlight", Character)
+                local Billboard = BillboardTemplate:Clone()
+                Billboard.Parent = Head
+                local Label = Billboard:FindFirstChildOfClass("TextLabel")
+                Label.Text = Player.Name
+                Label.Visible = NameEnabled
+                Label.TextColor3 = TeamColors[PlayerTeamName] or Color3FromRGB(0, 255, 0)
+            end
         end
     end
 end
@@ -257,96 +237,11 @@ do
 end
 
 do
-    function Utility:CoinsESP(State: boolean)
-        local CoinContainer = Utility:GetCoinContainer()
-        if not CoinContainer then return end
-        for _, Coin in CoinContainer:GetChildren() do
-            if not Coin then continue end
-            local CoinVisual = FindFirstChild(Coin, "CoinVisual")
-            if not CoinVisual then continue end
-            local MainCoin = FindFirstChildOfClass(CoinVisual, "MeshPart")
-            if not MainCoin then continue end
-            local OldHighlight = FindFirstChildOfClass(MainCoin, "Highlight")
-            if OldHighlight and State then
-                OldHighlight.FillColor = Color3FromRGB(255, 255, 0)
-                continue
-            elseif OldHighlight and not State then
-                Destroy(OldHighlight)
-                continue
-            end
-            if State then InstanceNew("Highlight", MainCoin) end
-        end
-    end
-
-    local BillboardTemplate = Utility:Create("BillboardGui", {
-        Name = "@",
-        Size = UDim2New(0, 100, 0, 40),
-        AlwaysOnTop = true,
-        StudsOffset = Vector3New(0, 3, 0),
-        SizeOffset = Vector2New(0, 0),
-        ClipsDescendants = false,
-        ResetOnSpawn = false,
-    })
-
-    local LabelTemplate = Utility:Create("TextLabel", {
-        Size = UDim2New(1, 0, 1, 0),
-        BackgroundTransparency = 1,
-        TextSize = 12,
-        TextStrokeTransparency = 0,
-        ZIndex = 10,
-        Parent = BillboardTemplate,
-    })
-
-    function Utility:PlayerESP(State: boolean, NameEnabled: boolean)
-        for _, Player in Players:GetPlayers() do
-            if Player == LocalPlayer then continue end
-            local PlayerTeamName = Utility:GetTeam(Player)
-            local Character = Player.Character
-            if not Character then continue end
-            local Head = FindFirstChild(Character, "Head")
-            if not Head then continue end
-            local OldHighlight = FindFirstChildOfClass(Character, "Highlight")
-            local OldBillboard = FindFirstChild(Head, "@")
-
-            if OldHighlight and State then
-                OldHighlight.FillColor = TeamColors[PlayerTeamName] or Color3FromRGB(0, 255, 0)
-                if OldBillboard then
-                    local Label = OldBillboard:FindFirstChildOfClass("TextLabel")
-                    if Label then
-                        Label.Visible = NameEnabled
-                        Label.TextColor3 = TeamColors[PlayerTeamName] or Color3FromRGB(0, 255, 0)
-                    end
-                end
-                continue
-            elseif OldHighlight and not State then
-                Destroy(OldHighlight)
-                if OldBillboard then Destroy(OldBillboard) end
-                continue
-            end
-
-            if State and Head then
-                InstanceNew("Highlight", Character)
-                local Billboard = BillboardTemplate:Clone()
-                Billboard.Parent = Head
-                local Label = Billboard:FindFirstChildOfClass("TextLabel")
-                Label.Text = Player.Name
-                Label.Visible = NameEnabled
-                Label.TextColor3 = TeamColors[PlayerTeamName] or Color3FromRGB(0, 255, 0)
-            end
-        end
-    end
-end
-
-do
     local Cons = Genv.Connections
 
-    function Connection:Add(Name: string, Signal: RBXScriptSignal, Callback: () -> ())
+    function Connection:Add(Name, Signal, Callback)
         if Cons[Name] then Cons[Name]:Disconnect() end
         Cons[Name] = Signal:Connect(Callback)
-    end
-
-    function Connection:Remove(Name: string)
-        if Cons[Name] then Cons[Name]:Disconnect() ; Cons[Name] = nil end
     end
 
     function Connection:Clear()
@@ -357,83 +252,17 @@ do
 end
 
 do
-    function Desync:Resume()
-        local RootPart = Utility:GetRootPart()
-        if not RootPart then return end
-        if not Desync.LastCFrame then return end
-        RootPart.CFrame = Desync.LastCFrame
-    end
-
-    function Desync:Teleport()
-        local RootPart = Utility:GetRootPart()
-        if not RootPart then return end
-        Desync.LastCFrame = RootPart.CFrame
-        if not Desync.LastCFrame then return end
-        RootPart.CFrame = CFrameNew(0/0, 0/0, 0/0)
-    end
-
-    function Desync:Stop()
-        local RootPart = Utility:GetRootPart()
-        if not RootPart then return end
-        if Desync.LastCFrame then RootPart.CFrame = Desync.LastCFrame end
-        Desync.LastCFrame = nil
-    end
-
-    function Desync:Init()
-        local RootPart = Utility:GetRootPart()
-        if not RootPart then return end
-        if Desync.LastCFrame then RootPart.CFrame = Desync.LastCFrame end
-        Desync.LastCFrame = RootPart.CFrame
-    end
-end
-
-do
     Connection:Clear()
     XRay:Reset()
-    RunService:UnbindFromRenderStep("DESYNCING")
-    Desync:Init()
 end
 
 do
-    RunService:BindToRenderStep("DESYNCING", 0, function()
-        Desync:Resume()
-    end)
-
-    Connection:Add("Misc/VoidHide", RunService.Heartbeat, function()
-        local Flag = Flags["Misc/VoidHide"]
-        if not Flag then return end
-        if Flag.CurrentValue then
-            Desync:Teleport()
-        elseif Desync.LastCFrame then
-            Desync:Stop()
-        end
-    end)
-
-    Connection:Add("Misc/AntiFling", RunService.Stepped, function()
-        local Flag = Flags["Misc/AntiFling"]
-        if not Flag then return end
-        Utility:AntiFling(Flag.CurrentValue)
-    end)
-
     Connection:Add("Visuals/ESP/Players", RunService.Stepped, function()
         local ChamsESP = Flags["Visuals/ESP/Chams"]
         if not ChamsESP then return end
         local NameESP = Flags["Visuals/ESP/Name"]
         if not NameESP then return end
         Utility:PlayerESP(ChamsESP.CurrentValue, NameESP.CurrentValue)
-    end)
-
-    Connection:Add("Visuals/ESP/Coins", RunService.Stepped, function()
-        local Flag = Flags["Visuals/ESP/Coins"]
-        if not Flag then return end
-        Utility:CoinsESP(Flag.CurrentValue)
-    end)
-
-    Connection:Add("Misc/AutoCoins", RunService.Stepped, function()
-        local Flag = Flags["Misc/AutoCoins"]
-        if not Flag then return end
-        if not Flag.CurrentValue then return end
-        Utility:ClaimAllCoins()
     end)
 
     Connection:Add("Visuals/World/XRay", RunService.Stepped, function()

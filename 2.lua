@@ -38,7 +38,21 @@ local TeamColors = {
     Sheriff = Color3FromRGB(0, 0, 255)
 }
 
-local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+local RayfieldLoaded, Rayfield = pcall(function()
+    return loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+end)
+
+if not RayfieldLoaded or not Rayfield then
+    warn("Rayfield加载失败，尝试备用源")
+    RayfieldLoaded, Rayfield = pcall(function()
+        return loadstring(game:HttpGet('https://raw.githubusercontent.com/SiriusSoftwareLtd/Rayfield/main/source.lua'))()
+    end)
+end
+
+if not RayfieldLoaded or not Rayfield then
+    warn("Rayfield加载失败:", Rayfield)
+    return
+end
 
 local Window = Rayfield:CreateWindow({
    Name = "MM2",
@@ -116,7 +130,7 @@ do
 end
 
 do
-    function Utility:Create(ClassName: string, Properties: table)
+    function Utility:Create(ClassName, Properties)
         local Object = InstanceNew(ClassName)
         local Parent = Properties.Parent
         for Index, Property in Properties do
@@ -127,7 +141,7 @@ do
         return Object
     end
 
-    function Utility:AntiFling(State: boolean)
+    function Utility:AntiFling(State)
         for _, Player in Players:GetPlayers() do
             if Player == LocalPlayer then continue end
             local Character = Player.Character
@@ -150,7 +164,7 @@ do
         return RootPart
     end
 
-    function Utility:GetTeam(Player: Player)
+    function Utility:GetTeam(Player)
         if not Player then return end
         local Backpack = FindFirstChildOfClass(Player, "Backpack")
         if not Backpack then return end
@@ -257,7 +271,7 @@ do
 end
 
 do
-    function Utility:CoinsESP(State: boolean)
+    function Utility:CoinsESP(State)
         local CoinContainer = Utility:GetCoinContainer()
         if not CoinContainer then return end
         for _, Coin in CoinContainer:GetChildren() do
@@ -297,7 +311,7 @@ do
         Parent = BillboardTemplate,
     })
 
-    function Utility:PlayerESP(State: boolean, NameEnabled: boolean)
+    function Utility:PlayerESP(State, NameEnabled)
         for _, Player in Players:GetPlayers() do
             if Player == LocalPlayer then continue end
             local PlayerTeamName = Utility:GetTeam(Player)
@@ -340,12 +354,12 @@ end
 do
     local Cons = Genv.Connections
 
-    function Connection:Add(Name: string, Signal: RBXScriptSignal, Callback: () -> ())
+    function Connection:Add(Name, Signal, Callback)
         if Cons[Name] then Cons[Name]:Disconnect() end
         Cons[Name] = Signal:Connect(Callback)
     end
 
-    function Connection:Remove(Name: string)
+    function Connection:Remove(Name)
         if Cons[Name] then Cons[Name]:Disconnect() ; Cons[Name] = nil end
     end
 
